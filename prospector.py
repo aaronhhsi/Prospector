@@ -31,6 +31,15 @@ def on_mouse_press(x, y, button, pressed):
                 if hasattr(on_mouse_press, 'gui_instance'):
                     on_mouse_press.gui_instance.hold_time_var.set(f"Hold Time: {hold_duration:.3f}s")
 
+def interruptible_sleep(duration):
+    """Sleep that can be interrupted by stop_macro signal in 0.01s intervals"""
+    end_time = time.time() + duration
+    while time.time() < end_time:
+        if stop_macro.is_set():
+            return True  # Interrupted
+        time.sleep(0.01)
+    return False  # Completed normally
+
 def siftMacro():
     for i in range(digsUntilFull):
         if stop_macro.is_set():
@@ -40,101 +49,76 @@ def siftMacro():
         # Random variation around sleep_time_base (adds 0 to 0.02 seconds)
         sleep_time = sleep_time_base + random.uniform(0, 0.02)
 
-
         mouse_controller.press(mouse.Button.left)
-        for _ in range(int(sleep_time * 100)):  # Check every 0.01 seconds
-            if stop_macro.is_set():
+        
+        # Use precise timing for short durations, interruptible for longer ones
+        if sleep_time <= 0.1:
+            time.sleep(sleep_time)  # Short enough to not need interruption
+        else:
+            if interruptible_sleep(sleep_time):  # Interrupted
                 mouse_controller.release(mouse.Button.left)
                 print("Macro stopped by user")
                 return
-            time.sleep(0.01)
         
-        # Release up
         mouse_controller.release(mouse.Button.left)
         
-        # Check for stop signal during delay
-        for _ in range(125):  # 1.25 seconds in 0.01 second chunks
-            if stop_macro.is_set():
-                print("Macro stopped by user")
-                return
-            time.sleep(0.01)
+        # 1.25 second delay - interruptible
+        if interruptible_sleep(1.25):
+            print("Macro stopped by user")
+            return
 
     if stop_macro.is_set():
         print("Macro stopped by user")
         return
 
-    # Hold W for 0.4 seconds
+    # Hold W for 0.5 seconds
     keyboard_controller = KeyboardController()
     keyboard_controller.press('w')
-    
-    # Check for stop signal during W press
-    for _ in range(50):  # 0.5 seconds
-        if stop_macro.is_set():
-            keyboard_controller.release('w')
-            print("Macro stopped by user")
-            return
-        time.sleep(0.01)
-    
+    if interruptible_sleep(0.5):
+        keyboard_controller.release('w')
+        print("Macro stopped by user")
+        return
     keyboard_controller.release('w')
     
-    # Check for stop signal during delay
-    for _ in range(30):  # 0.3 seconds
-        if stop_macro.is_set():
-            print("Macro stopped by user")
-            return
-        time.sleep(0.01)
+    # 0.3 second delay
+    if interruptible_sleep(0.3):
+        print("Macro stopped by user")
+        return
 
     # Press left click
     mouse_controller.press(mouse.Button.left)
     mouse_controller.release(mouse.Button.left)
     
-    # Check for stop signal during delay
-    for _ in range(100):  # 1 second
-        if stop_macro.is_set():
-            print("Macro stopped by user")
-            return
-        time.sleep(0.01)
+    # 1 second delay
+    if interruptible_sleep(1.0):
+        print("Macro stopped by user")
+        return
 
-    # Hold left click for sifting duration
+    # Hold left click for precise sifting duration - interruptible
     mouse_controller.press(mouse.Button.left)
-    
-    # Check for stop signal during sifting
-    sift_chunks = int(secondsToSift * 100)
-    for _ in range(sift_chunks):
-        if stop_macro.is_set():
-            mouse_controller.release(mouse.Button.left)
-            print("Macro stopped by user")
-            return
-        time.sleep(0.01)
-    
+    if interruptible_sleep(secondsToSift):
+        mouse_controller.release(mouse.Button.left)
+        print("Macro stopped by user")
+        return
     mouse_controller.release(mouse.Button.left)
     
-    # Check for stop signal during delay
-    for _ in range(200):  # 2 seconds
-        if stop_macro.is_set():
-            print("Macro stopped by user")
-            return
-        time.sleep(0.01)
+    # 2 second delay
+    if interruptible_sleep(2.0):
+        print("Macro stopped by user")
+        return
 
-    # Hold S for 0.4 seconds
+    # Hold S for 0.5 seconds
     keyboard_controller.press('s')
-    
-    # Check for stop signal during S press
-    for _ in range(50):  # 0.5 seconds
-        if stop_macro.is_set():
-            keyboard_controller.release('s')
-            print("Macro stopped by user")
-            return
-        time.sleep(0.01)
-    
+    if interruptible_sleep(0.5):
+        keyboard_controller.release('s')
+        print("Macro stopped by user")
+        return
     keyboard_controller.release('s')
     
-    # Check for stop signal during final delay
-    for _ in range(25):  # 0.25 seconds
-        if stop_macro.is_set():
-            print("Macro stopped by user")
-            return
-        time.sleep(0.01)
+    # Final delay
+    if interruptible_sleep(0.25):
+        print("Macro stopped by user")
+        return
 
 # Track if macro is currently running
 macro_running = threading.Event()
