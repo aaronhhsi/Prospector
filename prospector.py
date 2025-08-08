@@ -5,6 +5,8 @@ import time
 import random
 import tkinter as tk
 from tkinter import ttk
+import json
+import os
 
 # Create a mouse controller
 mouse_controller = mouse.Controller()
@@ -12,11 +14,50 @@ mouse_controller = mouse.Controller()
 should_exit = threading.Event()
 stop_macro = threading.Event()
 
-# Editable settings
-digsUntilFull = 7
-secondsToSift = 7
-cycles = 30
-sleep_time_base = 0.451
+# Configuration file path
+CONFIG_FILE = "config.json"
+
+# Default settings
+DEFAULT_CONFIG = {
+    "digsUntilFull": 3,
+    "secondsToSift": 6,
+    "cycles": 30,
+    "sleep_time_base": 1.1
+}
+
+def load_config():
+    """Load configuration from file, create default if not exists"""
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                config = json.load(f)
+                print(f"Configuration loaded from {CONFIG_FILE}")
+                return config
+        else:
+            print(f"No config file found, creating default {CONFIG_FILE}")
+            save_config(DEFAULT_CONFIG)
+            return DEFAULT_CONFIG.copy()
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"Error loading config: {e}. Using default settings.")
+        return DEFAULT_CONFIG.copy()
+
+def save_config(config):
+    """Save configuration to file"""
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=4)
+        print(f"Configuration saved to {CONFIG_FILE}")
+    except IOError as e:
+        print(f"Error saving config: {e}")
+
+# Load initial configuration
+config = load_config()
+
+# Editable settings (loaded from config)
+digsUntilFull = config["digsUntilFull"]
+secondsToSift = config["secondsToSift"]
+cycles = config["cycles"]
+sleep_time_base = config["sleep_time_base"]
 
 # Track the time the user physically holds the left mouse button
 def on_mouse_press(x, y, button, pressed):
@@ -63,7 +104,7 @@ def siftMacro():
         mouse_controller.release(mouse.Button.left)
         
         # 1.25 second delay - interruptible
-        if interruptible_sleep(1.25):
+        if interruptible_sleep(2):
             print("Macro stopped by user")
             return
 
@@ -127,7 +168,7 @@ class MacroGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Prospector Macro Controller")
-        self.root.geometry("500x550")
+        self.root.geometry("500x500")  # Decreased height from 600 to 500
         self.root.resizable(False, False)
         self.root.attributes('-topmost', True)  # Keep window always on top
         self.root.configure(bg="#2c3e50")  # Dark blue-gray background
@@ -158,7 +199,7 @@ class MacroGUI:
     def create_widgets(self):
         # Main container
         main_frame = tk.Frame(self.root, bg="#2c3e50")
-        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True, padx=15, pady=15)  # Reduced from 20 to 15
         
         # Title with modern styling
         title_label = tk.Label(main_frame, text="PROSPECTOR MACRO", 
@@ -201,7 +242,7 @@ class MacroGUI:
         
         # Hold time display with modern card-like appearance
         hold_frame = tk.Frame(main_frame, bg="#34495e", relief="flat", bd=2)
-        hold_frame.pack(fill="x", pady=(0, 20))
+        hold_frame.pack(fill="x")  # Removed pady=(0, 20) that was causing bottom margin
         
         hold_title = tk.Label(hold_frame, text="MOUSE HOLD TIMER", 
                              font=("Segoe UI", 8, "bold"), 
@@ -213,27 +254,12 @@ class MacroGUI:
                                   fg="#e74c3c", bg="#34495e")
         hold_time_label.pack(pady=(0, 10))
         
-        # Control frame
-        control_frame = tk.Frame(main_frame, bg="#2c3e50")
-        control_frame.pack(pady=10)
-        
-        # Modern Start/Stop button
-        self.control_button = tk.Button(control_frame, text="START MACRO", 
-                                       command=self.toggle_macro, 
-                                       bg="#27ae60", fg="white", 
-                                       font=("Segoe UI", 10, "bold"),
-                                       width=12, height=1,
-                                       relief="flat", bd=0,
-                                       activebackground="#2ecc71",
-                                       cursor="hand2")
-        self.control_button.pack()
-        
         # Instructions with modern styling
         instructions = tk.Label(main_frame, 
-                               text="• Press DELETE to toggle macro\n• Hold LEFT MOUSE to measure timing\n• Press LEFT ARROW to exit", 
+                               text="• Press DELETE to toggle macro\n• Hold LEFT MOUSE to measure timing\n• Press LEFT ARROW to exit\n• Settings auto-save on exit", 
                                font=("Segoe UI", 9), fg="#95a5a6", bg="#2c3e50",
                                justify="left")
-        instructions.pack(pady=(10, 0))
+        instructions.pack(pady=(15, 10))  # Added more top padding and bottom padding
         
     def create_setting_row(self, parent, label_text, variable, from_val, to_val, row):
         """Helper method to create consistent setting rows"""
@@ -247,26 +273,28 @@ class MacroGUI:
                         insertbackground="#2c3e50")
         entry.grid(row=row, column=1, padx=15, pady=12, sticky="ew")
         
-    def toggle_macro(self):
-        if macro_running.is_set():
-            # Stop macro
-            self.stop_macro()
-        else:
-            # Start macro
-            self.start_macro()
-    
     def on_key_press(self, key):
         try:
             if key == keyboard.Key.delete:
                 # Toggle macro with Delete key
-                self.root.after(0, self.toggle_macro)
+                self.toggle_macro_via_key()
             elif key == keyboard.Key.left:
                 # Exit with left arrow
                 self.root.after(0, self.on_closing)
         except AttributeError:
             pass
     
-    def start_macro(self):
+    def toggle_macro_via_key(self):
+        """Toggle macro functionality for Delete key"""
+        if macro_running.is_set():
+            # Stop macro
+            print("Stopping macro...")
+            stop_macro.set()
+        else:
+            # Start macro
+            self.start_macro_via_key()
+    
+    def start_macro_via_key(self):
         global digsUntilFull, secondsToSift, cycles, sleep_time_base
         
         # Update global variables with current GUI values
@@ -280,13 +308,11 @@ class MacroGUI:
         stop_macro.clear()
         macro_running.set()
         
-        self.control_button.config(text="STOP MACRO", bg="#e74c3c", activebackground="#c0392b")
-        
         # Run macro in separate thread
         def run_macro():
             print("Macro starting in 1 second...")
             time.sleep(1)
-            print("Macro running - can be stopped with button or Delete key")
+            print("Macro running - can be stopped with Delete key")
             
             for i in range(cycles):
                 if stop_macro.is_set():
@@ -304,20 +330,21 @@ class MacroGUI:
                 print(f"All {cycles} macro cycles completed")
             
             macro_running.clear()
-            self.root.after(0, self.reset_button)
         
         threading.Thread(target=run_macro, daemon=True).start()
     
-    def stop_macro(self):
-        print("Stopping macro...")
-        stop_macro.set()
-        self.reset_button()
-    
-    def reset_button(self):
-        self.control_button.config(text="START MACRO", bg="#27ae60", activebackground="#2ecc71")
-    
     def on_closing(self):
         print("Closing application...")
+        
+        # Save current settings before closing
+        current_config = {
+            "digsUntilFull": self.digs_var.get(),
+            "secondsToSift": self.sift_var.get(),
+            "cycles": self.cycles_var.get(),
+            "sleep_time_base": self.sleep_time_var.get()
+        }
+        save_config(current_config)
+        
         stop_macro.set()
         should_exit.set()
         if hasattr(self, 'mouse_listener'):

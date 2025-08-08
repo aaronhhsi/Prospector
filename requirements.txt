@@ -1,0 +1,3 @@
+# Requirements for Prospector Macro
+# Main dependency for keyboard and mouse control
+pynput>=1.7.0

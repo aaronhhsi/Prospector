@@ -1,0 +1,6 @@
+{
+    "digsUntilFull": 3,
+    "secondsToSift": 6,
+    "cycles": 30,
+    "sleep_time_base": 1.1
+}
